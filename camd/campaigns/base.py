@@ -1,13 +1,4 @@
 #  Copyright (c) 2019 Toyota Research Institute.  All rights reserved.
-"""
-This module contains basic campaign functionality.  Objects
-and logic in this module should be very generic and not
-constrained to a particular mode of materials discovery.
-
-Furthermore, the "Campaign" logic should be kept as simple
-as possible.
-"""
-
 import os
 import pickle
 import json
@@ -22,19 +13,6 @@ from camd.agent.base import RandomAgent
 
 
 class Campaign(MSONable):
-    """
-    Campaign provides a sequential, workflow-like capability where an
-    Agent iterates over a candidate space to choose and execute
-    new Experiments, given a certain objective. The abstraction
-    follows closely the "scientific method". Agent is the entity
-    that suggests new Experiments.
-
-    Supporting entities are Analyzers and Finalizers. Framework
-    is flexible enough to implement many sequential learning or
-    optimization tasks, including active-learning, bayesian optimization
-    or black-box optimization with local or global optima search.
-
-    """
     def __init__(
         self,
         candidate_data,
@@ -49,8 +27,16 @@ class Campaign(MSONable):
         path=None,
     ):
         """
-        Invokes a campaign from candidates, seed, agent, and other supporting
-        entities for decision-making, experiment, and analysis.
+        Campaign provides a sequential, workflow-like capability where an
+        Agent iterates over a candidate space to choose and execute
+        new Experiments, given a certain objective. The abstraction
+        follows closely the "scientific method". Agent is the entity
+        that suggests new Experiments.
+
+        Supporting entities are Analyzers and Finalizers. Framework
+        is flexible enough to implement many sequential learning or
+        optimization tasks, including active-learning, bayesian optimization
+        or black-box optimization with local or global optima search.
 
         Args:
             candidate_data (pd.DataFrame): List of uids for candidate
@@ -138,7 +124,7 @@ class Campaign(MSONable):
         # Get new results
         print("{} {} state: Getting new results".format(self.type, self.iteration))
         self.experiment.monitor()
-        new_experimental_results = self.experiment.get_results()
+        new_experimental_results = self.experiment.get_results().astype({'target':'float'})
         os.chdir(self.path)
 
         # Load seed_data
@@ -304,14 +290,6 @@ class Campaign(MSONable):
         return self.__class__.__name__
 
     def finalize(self):
-        """
-        Run finalization method for campaign
-        if analyzer has finalize method
-
-        Returns:
-            None
-
-        """
         print("Finalizing campaign.")
         os.chdir(self.path)
         if hasattr(self.analyzer, "finalize"):
@@ -320,20 +298,6 @@ class Campaign(MSONable):
             self.s3_sync()
 
     def load(self, data_holder, method="json", no_exist_fail=True):
-        """
-        Method to load stored object attributes
-
-        Args:
-            data_holder (str): attribute to be loaded
-            method (str): method by which to load object,
-                'pickle' and 'json' are currently supported
-            no_exist_fail (bool): whether to throw error
-                on non-existence of data
-
-        Returns:
-            None
-
-        """
         if method == "pickle":
             m = pickle
             mode = "rb"
@@ -356,19 +320,6 @@ class Campaign(MSONable):
                 self.__setattr__(data_holder, None)
 
     def save(self, data_holder, custom_name=None, method="json"):
-        """
-        Save method for storing campaign data
-
-        Args:
-            data_holder (str): attribute to be written to file
-            custom_name (str): custom filename if desired
-            method (str): method option for data storage,
-                'json' or 'pickle' are supported
-
-        Returns:
-            None
-
-        """
         if custom_name:
             _path = os.path.join(self.path, custom_name)
         else:
@@ -384,8 +335,12 @@ class Campaign(MSONable):
         with open(_path, mode) as f:
             m.dump(self.__getattribute__(data_holder), f)
 
+        # Do s3 sync if plot_hull
         if self.s3_prefix:
             self.s3_sync()
+
+    def get_state(self):
+        return self.loop_state
 
     def s3_sync(self):
         """
